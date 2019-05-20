@@ -21,18 +21,19 @@ def main(argv):
     file0 = TFile(args.input)
     
     dataTypes = ['raw', 'wire', 'cnn', 'truth']
+    dataTypes = ['wire', 'cnn', 'truth']
     
-    keys = defaultdict(list)
-    
+    keys       = defaultdict(list)
     for dataType in dataTypes:
         keys[dataType] = [k.GetName() for k in file0.Get(meiDir).GetListOfKeys() if dataType in k.GetName()]
-        
     
+    dataArrays = defaultdict(list)
     for dataType in dataTypes:
-        arrayLen = len(keys[dataType])
         for key in keys[dataType]: 
             array = hist2array(file0.Get(meiDir + '/' + key))
-        
+            dataArrays[dataType].append(array)
+        output = np.asarray(dataArrays[dataType])
+        np.save(dataType, output)
     
 if __name__ == "__main__":
     main(argv)
