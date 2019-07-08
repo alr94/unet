@@ -5,4 +5,12 @@ cnn/
 img/
 wire/
 truth/
+cluem/
+clumichel/
+cnnem/
+cnnmichel/
+energy/
+model_summary.txt
+trueEnergy/
 *.pyc
+*.swp
