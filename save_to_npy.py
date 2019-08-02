@@ -1,46 +1,60 @@
 # vim: tabstop=2 expandtab shiftwidth=2 softtabstop=2
 import argparse 
-parser = argparse.ArgumentParser(description='Run CNN training on patches with' 
-                                 + ' a few different hyperparameter sets.')
-parser.add_argument('-i', '--input', help = 'Input file')
-args = parser.parse_args()
+parser = argparse.ArgumentParser(description = 'Save data from root to npy')
+parser.add_argument('-i', '--input',  help = 'Input ROOT file')
+parser.add_argument('-o', '--output', help = 'Output Directory')
+args   = parser.parse_args()
 
-from sys import argv
-import os
+import os, gc
+import multiprocessing as mp
 import numpy as np
+from collections import defaultdict
+import math 
 
 import ROOT
-from ROOT import TFile
 from root_numpy import hist2array
 
-from collections import defaultdict
-
-def main(argv):
+def SaveDataByType(dataType, meiDir, keys, batchSize, batchNumber):
     
-  meiDir = 'MichelEnergyImage'
-  dataTypes = ['wire', 'energy', 'cnnem', 'cnnmichel', 'cluem', 'clumichel', 
-               'trueEnergy', 'truth']
+  data = []
+  for i in range(batchSize):
     
-  for dataType in dataTypes:
-        
-    data = []
-        
-    fileName = args.input
-    file0 = TFile(fileName)
-        
-    keys = [k.GetName() for k in file0.Get(meiDir).GetListOfKeys()
-            if dataType == k.GetName().split('_')[-1]]
-            
-    for key in keys: 
-      array = hist2array(file0.Get(meiDir + '/' + key))
-      data.append(array[2:-2, 2:-2])
+    keyIndex = batchNumber * batchSize + i
     
-    if dataType not in os.listdir('.'): os.mkdir(dataType)
+    if i % 1000 == 0: print (i)
     
-    output = np.asarray(data)
-    np.save(dataType + '/' + dataType, output)
+    if keyIndex > len(keys) - 1: break
     
-    print (dataType, len(output))
+    hist = keys[keyIndex].ReadObj()
+    data.append(hist2array(hist)[2:-2, 2:-2])
+    ROOT.SetOwnership(hist, True)
+    
+  if data != []:
+    dataArray = np.asarray(data)
+    np.save(args.output + '/' + dataType + '_' + str(batchNumber), dataArray)
     
 if __name__ == "__main__":
-  main(argv)
+  
+  batchSize  = 5000
+  dataTypes  = ['wire',  'cluem', 'clumichel', 'truth', 'trueEnergy', 'energy', 
+                'cnnem', 'cnnmichel',]
+  
+  file0    = ROOT.TFile(args.input)
+  meiDir   = file0.Get('MichelEnergyImage')
+  
+  for dataType in dataTypes:
+    
+    print ("Starting data conversion for ", dataType)
+  
+    keys = [k for k in meiDir.GetListOfKeys()
+            if dataType == k.GetName().split('_')[-1]]
+    
+    n_batches = int(math.ceil(len(keys) / batchSize)) 
+    for batchNumber in range(n_batches):
+      # Using mp to ensure memory is cleared after each batch
+      
+      print ("Saving " + dataType + " batch " + str(batchNumber) + '/' + str(n_batches))
+      p = mp.Process(target=SaveDataByType, 
+                     args=(dataType, meiDir, keys, batchSize, batchNumber,))
+      p.start()
+      p.join()

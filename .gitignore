@@ -12,5 +12,6 @@ cnnmichel/
 energy/
 model_summary.txt
 trueEnergy/
+isk/
 *.pyc
 *.swp

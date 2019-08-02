@@ -23,15 +23,25 @@ def sum_(true, pred):
   sum_ = K.sum(K.abs(true) + K.abs(pred), axis = [1, 2])
   return sum_
 
-def jaccard(true, pred):
-  smooth = 1e-10
+def union(true, pred):
+  sum_ = K.sum(K.abs(true) + K.abs(pred), axis = [1, 2])
+  intersection = K.sum(K.abs(true * pred), axis = [1, 2])
+  return sum_ - intersection
+
+def jaccard(true, pred, smooth):
   i      = intersection(true, pred)
-  s      = sum_(true, pred)
-  u      = s - i
+  u      = union(true, pred)
   jac    = (i + smooth) / (u + smooth)
   jac    = jac * tf.cast(jac <= 1., jac.dtype)
   return jac
 
 def loss_jaccard(true, pred):
-  jac = jaccard(true, pred)
+  smooth = 1e-10
+  jac = jaccard(true, pred, smooth)
   return - jac
+
+def jaccard_distance(y_true, y_pred, smooth=1e-10):
+  intersection = tf.reduce_sum(y_true * y_pred, axis=(1,2))
+  sum_ = tf.reduce_sum(y_true + y_pred, axis=(1,2))
+  jac = (intersection + smooth) / (sum_ - intersection + smooth)
+  return tf.reduce_mean(- jac)

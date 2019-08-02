@@ -1,3 +1,4 @@
+# vim: tabstop=2 expandtab shiftwidth=2 softtabstop=2
 from ROOT import TFile
 from root_numpy import hist2array
 
@@ -6,6 +7,8 @@ from os import listdir
 from os.path import isfile, join
 import os, json
 from collections import defaultdict
+import datetime
+import copy
 
 def count_events(folder, key):
     nevents = 0
@@ -213,34 +216,34 @@ def read_config(cfgname):
     return config
 
 def save_model(model, name):
-  try:
+    print (datetime.datetime.now().strftime("%y%m%d-%H:%M"))
     name += '_'
     name += datetime.datetime.now().strftime("%y%m%d-%H:%M")
-    with open(name + '_architecture.json', 'w') as f: f.write(model.to_json())
+    print (name)
+    with open(name + '_architecture.json', 'w') as f: 
+      f.write(model.to_json())
     model.save_weights(name + '_weights.h5', overwrite = True)
-    return True
-  
-  except: return False
 
-def get_unet_data():
+def get_unet_data(inputDir, batch, n_channels):
 
-  dataTypes = ['wire', 'energy', 'cnnem', 'cnnmichel', 'cluem', 'clumichel', 
-             'truth']
-
-  data      = defaultdict()
-  for dataType in dataTypes: 
-    data[dataType] = np.load(dataType + '/' + dataType + '.npy')
-  
-  n_patches = data['truth'].shape[0]
-  patch_w   = data['truth'].shape[1]
-  patch_h   = data['truth'].shape[2]
-  
-  x_data = np.zeros((n_patches, patch_w, patch_h, 3))
-  x_data[...,0] = data['wire']
-  x_data[...,1] = data['clumichel']
-  x_data[...,2] = data['cluem']
-  
-  y_data = data['truth']
+  y_data = np.load(inputDir + '/truth_' + str(batch) + '.npy')
   y_data = y_data.reshape((y_data.shape[0], y_data.shape[1], y_data.shape[2], 1))
-
-  return x_data, y_data
+  
+  n_patches = y_data.shape[0]
+  patch_w   = y_data.shape[1]
+  patch_h   = y_data.shape[2]
+  
+  if n_channels == 3:
+    x_data = np.zeros((n_patches, patch_w, patch_h, 3))
+    x_data[...,0] = np.load(inputDir + '/wire_' + str(batch) + '.npy')
+    x_data[...,1] = np.load(inputDir + '/clumichel_' + str(batch) + '.npy')
+    x_data[...,2] = np.load(inputDir + '/cluem_' + str(batch) + '.npy')
+  else:
+    x_data = np.zeros((n_patches, patch_w, patch_h, 1))
+    x_data[...,0] = np.load(inputDir + '/clumichel_' + str(batch) + '.npy')
+  
+  assert len(x_data) == len(y_data)
+  
+  p = np.random.permutation(len(x_data))
+  
+  return copy.deepcopy(x_data[p]), copy.deepcopy(y_data[p])
