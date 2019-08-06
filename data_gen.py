@@ -33,7 +33,8 @@ class DataGenerator(keras.utils.Sequence):
     self.TFile = ROOT.TFile(root_data)
     self.TDir  = self.TFile.Get('MichelEnergyImage')
     
-    self.data_types = ['wire', 'cluem', 'clumichel', 'truth']
+    self.data_types = ['wire', 'cluem', 'clumichel', 'truth', 'trueEnergy', 
+                       'energy']
     
     self.keys = defaultdict()
     for data_type in self.data_types:
