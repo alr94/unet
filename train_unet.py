@@ -67,11 +67,10 @@ def SaveModel(model, name):
     model.save_weights(name + '_weights.h5', overwrite = True)
     
 def FilterData(x, y):
-  
   r = loss_jaccard(K.variable(y), 
                    K.variable(y)).eval(session = K.get_session())
-  idx = np.any(r < - 1e-10, axis = 1)
   
+  idx = np.any(r < - 1e-10, axis = 1)
   x = x[idx]
   y = y[idx]
   
@@ -104,9 +103,9 @@ def TrainWithGenerator(train_gen, model, epochs = 1, val_gen = None):
 ################################################################################
 # Build dataset generators
 use_vgg       = False
-use_generator = args.input.split('.')[-1] == 'root' 
-batch_size =  16
-n_channels    = 3 
+use_generator = args.input.split('.')[-1] == 'root'
+batch_size    = 8
+n_channels    = 1
 
 patch_w, patch_h, patch_depth = 160, 160, n_channels 
 
@@ -133,8 +132,6 @@ else:
   
   val_x,  val_y  = get_unet_data(args.input, val_batches, n_channels)
   n_val, patch_w, patch_h, patch_depth = val_x.shape
-  
-  batch_size =  16
 
 ################################################################################
 # Training
@@ -143,7 +140,7 @@ with sess.as_default():
   
   print ('Building model')
   if args.model: 
-    model_json = open(args.model, 'r')
+    model_json      = open(args.model, 'r')
     read_model_json = model_json.read()
     model_json.close()
     model = model_from_json(read_model_json)
@@ -156,9 +153,9 @@ with sess.as_default():
   # optimizer = SGD(lr = 0.01)
   # optimizer = SGD(lr = 0.1, decay = 1E-9, momentum = 0.9, nesterov = True)
   # optimizer = Adam()
-  # optimizer = Nadam()
+  optimizer = Nadam()
   # optimizer = RMSprop(lr = 0.01, rho = 0.9, epsilon = 1e-8, decay = 0.0)
-  optimizer = Adadelta(lr = 1.0, rho = 0.95, epsilon = 1e-8, decay = 0.0)
+  # optimizer = Adadelta(lr = 1.0, rho = 0.95, epsilon = 1e-8, decay = 0.0)
   
   model.compile(optimizer = optimizer, loss = jaccard_distance)
   model.summary()
@@ -167,9 +164,9 @@ with sess.as_default():
     print ('Loading initial weights')
     model.load_weights(args.weights)
   
-  loss, losses    =  0., []
-  val_loss, val_losses    =  0., []
-  epoch = 0
+  loss, losses         = 0., []
+  val_loss, val_losses = 0., []
+  epoch                = 0
   
   if use_generator:
     
@@ -187,9 +184,9 @@ with sess.as_default():
         val_loss = h.history['val_loss'][0]
         val_losses.append(val_loss)
         
-        if epoch % 2 == 0:
-          print ('Saving model checkpoint')
-          SaveModel(model, 'model_epoch'+str(epoch)+'_loss'+str(loss))
+        print ('Saving model checkpoint')
+        SaveModel(model, 'model_epoch' + str(epoch) + '_loss' + str(loss) + 
+                  '_val' + str(val_loss)) 
           
     else:
       while epoch < args.epochs:
@@ -205,9 +202,9 @@ with sess.as_default():
         val_loss = h.history['val_loss'][0]
         val_losses.append(val_loss)
         
-        if epoch % 2 == 0:
-          print ('Saving model checkpoint')
-          SaveModel(model, 'model_epoch'+str(epoch)+'_loss'+str(loss))
+        print ('Saving model checkpoint')
+        SaveModel(model, 'model_epoch' + str(epoch) + '_loss' + str(loss) + 
+                  '_val' + str(val_loss)) 
       
   else:
     if args.loss:
@@ -228,9 +225,9 @@ with sess.as_default():
           val_loss = h.history['val_loss'][0]
           val_losses.append(val_loss)
           
-        if epoch % 2 == 0 and epoch != 0:
-          print ('Saving model checkpoint')
-          SaveModel(model, 'model_epoch'+str(epoch)+'_loss'+str(loss))
+        print ('Saving model checkpoint')
+        SaveModel(model, 'model_epoch' + str(epoch) + '_loss' + str(loss) + 
+                  '_val' + str(val_loss)) 
           
     else:
       while epoch < args.epochs:
@@ -242,9 +239,20 @@ with sess.as_default():
         for batch in train_batches:
           h = TrainOnBatch(batch, args, model, val_x, val_y, batch_size, 
                            n_channels)
+          
+          loss = h.history['loss'][0]
+          losses.append(loss)
+          
+          val_loss = h.history['val_loss'][0]
+          val_losses.append(val_loss)
+        
+        print ('Saving model checkpoint')
+        SaveModel(model, 'model_epoch' + str(epoch) + '_loss' + str(loss) + 
+                  '_val' + str(val_loss)) 
         
 print ('Saving model checkpoint')
-SaveModel(model, 'model_epoch'+str(epoch)+'_loss%.5f' % loss)
+SaveModel(model, 'model_epoch' + str(epoch) + '_loss' + str(loss) + 
+          '_val' + str(val_loss)) 
 
 if use_generator:
   
