@@ -91,13 +91,16 @@ def TrainOnBatch(batch, args, model, val_x, val_y, batch_size, n_channels):
   
   return h
 
-def TrainWithGenerator(train_gen, model, epochs = 1, val_gen = None):
+def TrainWithGenerator(train_gen, tb_callback, model, epochs = 1, 
+                       val_gen = None):
   print ('Fitting with generator')
   if not val_gen:
-    h = model.fit_generator(train_gen, shuffle = True, epochs = epochs)
+    h = model.fit_generator(train_gen, shuffle = True, epochs = epochs, 
+                            callbacks = [ tb_callback ])
   else:
     h = model.fit_generator(train_gen, validation_data = val_gen, 
-                            shuffle = True, epochs = epochs)
+                            shuffle = True, epochs = epochs,
+                            callbacks = [ tb_callback ])
   return h
 
 ################################################################################
@@ -105,7 +108,7 @@ def TrainWithGenerator(train_gen, model, epochs = 1, val_gen = None):
 use_vgg       = False
 use_generator = args.input.split('.')[-1] == 'root'
 batch_size    = 8
-n_channels    = 1
+n_channels    = 3
 
 patch_w, patch_h, patch_depth = 160, 160, n_channels 
 
@@ -171,12 +174,16 @@ with sess.as_default():
   if use_generator:
     
     if args.loss:
+      
+      tb_callback = keras.callbacks.TensorBoard(log_dir='log')
+      
       while epoch < args.epochs and loss > args.loss:
         
         epoch += 1
         print ("Epoch: ", epoch, "of ", args.epochs)
         
-        h = TrainWithGenerator(train_gen, model, epochs = 1, val_gen = val_gen)
+        h = TrainWithGenerator(train_gen, tb_callback, model, epochs = 1, 
+                               val_gen = val_gen)
         
         loss = h.history['loss'][0]
         losses.append(loss)
@@ -189,12 +196,16 @@ with sess.as_default():
                   '_val' + str(val_loss)) 
           
     else:
+      
+      tb_callback = keras.callbacks.TensorBoard(log_dir='log')
+      
       while epoch < args.epochs:
         
         epoch += 1
         print ("Epoch: ", epoch, "of ", args.epochs)
         
-        h = TrainWithGenerator(train_gen, model, epochs = 1, val_gen = val_gen)
+        h = TrainWithGenerator(train_gen, tb_callback, model, epochs = 1, 
+                               val_gen = val_gen)
         
         loss = h.history['loss'][0]
         losses.append(loss)
@@ -272,31 +283,6 @@ if use_generator:
     test_x[i * batch_size: (i + 1) * batch_size] = x
     test_y[i * batch_size: (i + 1) * batch_size] = y
     
-  ##############################################################################
-  # Predictions
-  predictions = model.predict(test_x)
-  
-  for i in range(100):
-    
-    image = np.swapaxes(predictions[i], 0, 2)
-    np.swapaxes(image, 1, 2)
-    plot = plt.imshow(image[0])
-    plt.colorbar()
-    plt.savefig('img/out_' + str(i) + '.png')
-    plt.close()
-    
-    image = np.swapaxes(test_y[i], 0, 2)
-    plot = plt.imshow(image[0])
-    plt.colorbar()
-    plt.savefig('img/true_' + str(i) + '.png')
-    plt.close()
-    
-    image = np.swapaxes(test_x[i], 0, 2)
-    plot = plt.imshow(image[0])
-    plt.colorbar()
-    plt.savefig('img/raw_' + str(i) + '.png')
-    plt.close()
-    
   plot = plt.plot(losses)
   plt.savefig('img/losses.png')
   plt.close()
@@ -310,31 +296,11 @@ else:
   test_x, test_y = get_unet_data(args.input, test_batches, n_channels)
   score = model.evaluate(test_x, test_y)
   print ('Test score: ', score)
-
-  ##############################################################################
-  # Predictions
-  predictions = model.predict(test_x)
-  for i in range(100):
     
-    image = np.swapaxes(predictions[i], 0, 2)
-    np.swapaxes(image, 1, 2)
-    plot = plt.imshow(image[0])
-    plt.colorbar()
-    plt.savefig('img/test_out_' + str(i) + '.png')
-    plt.close()
-    
-    image = np.swapaxes(test_y[i], 0, 2)
-    plot = plt.imshow(image[0])
-    plt.colorbar()
-    plt.savefig('img/test_true_' + str(i) + '.png')
-    plt.close()
-    
-    image = np.swapaxes(test_x[i], 0, 2)
-    plot = plt.imshow(image[0])
-    plt.colorbar()
-    plt.savefig('img/test_raw_' + str(i) + '.png')
-    plt.close()
-    
+  plot = plt.plot(losses)
+  plt.savefig('img/losses.png')
+  plt.close()
+  
   plot = plt.plot(val_losses)
   plt.savefig('img/val_losses.png')
   plt.close()
