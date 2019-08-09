@@ -86,8 +86,9 @@ if not (args.input and args.weights):
   exit()
   
 n_channels       = 3
+conv_depth       = 3
 patch_w, patch_h = 160, 160
-batch_size = 1
+batch_size       = 1
 
 print ('Building data generator')
 test_gen = DataGenerator(dataset_type = 'test', batch_size = batch_size, 
@@ -101,7 +102,8 @@ sess = tf.InteractiveSession()
 with sess.as_default():
   
   print ('Loading model')
-  model     = unet(inputshape = (patch_w, patch_h, n_channels), conv_depth = 3)
+  model     = unet(inputshape = (patch_w, patch_h, n_channels), 
+                   conv_depth = conv_depth)
   optimizer = Nadam()
   
   model.compile(optimizer = optimizer, loss = jaccard_distance)
