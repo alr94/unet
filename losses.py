@@ -11,7 +11,7 @@ from keras.callbacks import ModelCheckpoint, LearningRateScheduler
 from keras.optimizers import *
 from keras.preprocessing.image import *
 keras.backend.set_image_data_format('channels_last')
-keras.backend.set_image_dim_ordering('tf')
+# keras.backend.set_image_dim_ordering('tf')
 
 ################################################################################
 # Model utilities
