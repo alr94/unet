@@ -16,3 +16,4 @@ isk/
 *.pyc
 *.swp
 log/
+*.bak
