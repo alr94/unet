@@ -12,9 +12,9 @@ from losses import *
 
 class DataGenerator(keras.utils.Sequence):
 
-  def __init__(self, root_data, dataset_type, dirname, batch_size = 32, shuffle = True, 
-               patch_w = 160, patch_h = 160, patch_depth = 3, val_frac = 0.05,
-               test_frac = 0.05):
+  def __init__(self, root_data, dataset_type, dirname, batch_size = 32, 
+               shuffle = True, patch_w = 160, patch_h = 160, patch_depth = 3, 
+               val_frac = 0.05, test_frac = 0.05):
     
     self.dataset_type = dataset_type
     self.val_frac  = val_frac
