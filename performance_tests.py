@@ -113,7 +113,6 @@ patch_w, patch_h = 160, 160
 batch_size       = 1
 
 print ('Building data generator')
-# FIXME
 test_gen = DataGenerator(dataset_type = 'all', dirname = 'MichelEnergyImage', 
                          batch_size = batch_size, shuffle = False, 
                          root_data = args.input, patch_w = patch_w, 
@@ -132,27 +131,26 @@ with sess.as_default():
   test_y      = np.zeros((test_gen.__len__(), patch_w, patch_h, 1))
   test_true   = np.zeros((test_gen.__len__(), patch_w, patch_h, 1))
   test_charge = np.zeros((test_gen.__len__(), patch_w, patch_h, 1))
+  test_energy = np.zeros((test_gen.__len__(), patch_w, patch_h, 1))
   test_e      = np.zeros((test_gen.__len__(), 1))
   test_n      = np.zeros((test_gen.__len__(), 1))
   for i in range(test_gen.__len__()):
     test_x[i], test_y[i] = test_gen.__getitem__(i)
     test_true[i]         = test_gen.getitembykey(i, 'trueEnergy')
-    test_charge[i]       = test_gen.getitembykey(i, 'energy')
+    test_charge[i]       = test_gen.getitembykey(i, 'wire')
+    test_energy[i]       = test_gen.getitembykey(i, 'energy')
     test_e[i]            = test_gen.getenergy(i)
     test_n[i]            = test_gen.getitembykey(i, 'nTrue')[0,0,0]
-    
-  #FIXME
-  # test_x    = test_x[:8]
-  # test_y    = test_y[:8]
-  # test_true = test_true[:8]
-  # test_e    = test_e[:8]
     
   print ('Making predictions')
   predictions = model.predict(test_x, batch_size = 8, verbose = 1)
   print ('Made predictions')
-  flat = predictions.flatten()
-  true_flat = test_y.flatten()
-  e_flat = test_charge[..., 0].flatten()
+  
+  q_flat    = test_charge[..., 0].flatten()
+  flat      = predictions.flatten()[q_flat > 0.1]
+  true_flat = test_y.flatten()[q_flat > 0.1]
+  e_flat    = test_energy[..., 0].flatten()[q_flat > 0.1]
+  q_flat    = q_flat[q_flat > 0.1]
   
   from ROOT import TFile, TTree
   from array import array
@@ -171,6 +169,7 @@ with sess.as_default():
   b_ep         = array('f', [0.])
   b_ndq        = array('f', [0.])
   b_nde        = array('f', [0.])
+  b_ndt        = array('f', [0.])
   b_nt         = array('f', [0.])
   b_nti        = array('f', [0.])
   b_nhi        = array('f', [0.])
@@ -178,6 +177,8 @@ with sess.as_default():
   b_rq         = array('f', [0.])
   b_ie         = array('f', [0.])
   b_re         = array('f', [0.])
+  b_it         = array('f', [0.])
+  b_rt         = array('f', [0.])
   t_ev.Branch('thresh'              , b_thresh     , 'b_thresh/F')
   t_ev.Branch('inv_thresh'          , b_inv_thresh , 'b_inv_thresh/F')
   t_ev.Branch('energy'              , b_energy     , 'b_energy/F')
@@ -187,6 +188,7 @@ with sess.as_default():
   t_ev.Branch('energy_purity'       , b_ep         , 'b_ep/F')
   t_ev.Branch('norm_diff_charge'    , b_ndq        , 'b_ndq/F')
   t_ev.Branch('norm_diff_energy'    , b_nde        , 'b_nde/F')
+  t_ev.Branch('norm_diff_true'      , b_ndt        , 'b_ndt/F')
   t_ev.Branch('n_true'              , b_nt         , 'b_nt/F')
   t_ev.Branch('n_trueimage'         , b_nti        , 'b_nti/F')
   t_ev.Branch('n_hits_image'        , b_nhi        , 'b_nhi/F')
@@ -194,21 +196,26 @@ with sess.as_default():
   t_ev.Branch('reco_charge'         , b_rq         , 'b_rq/F')
   t_ev.Branch('integrated_energy'   , b_ie         , 'b_ie/F')
   t_ev.Branch('reco_energy'         , b_re         , 'b_re/F')
+  t_ev.Branch('integrated_true'     , b_it         , 'b_it/F')
+  t_ev.Branch('reco_true'           , b_rt         , 'b_rt/F')
   
   
-  t_hit      = TTree('hit_metrics', 'Thresholded hit scores')
-  b_hit_cnn  = array('f', [0.])
-  b_hit_int  = array('f', [0.])
-  b_hit_true = array('f', [0.])
-  t_hit.Branch('hit_cnn' , b_hit_cnn , 'b_hit_cnn/F')
-  t_hit.Branch('hit_int' , b_hit_int , 'b_hit_int/F')
-  t_hit.Branch('hit_true' , b_hit_true , 'b_hit_true/F')
+  t_hit        = TTree('hit_metrics', 'Thresholded hit scores')
+  b_hit_cnn    = array('f', [0.])
+  b_hit_int    = array('f', [0.])
+  b_hit_energy = array('f', [0.])
+  b_hit_true   = array('f', [0.])
+  t_hit.Branch('hit_cnn'  , b_hit_cnn    , 'b_hit_cnn/F')
+  t_hit.Branch('hit_int'  , b_hit_int    , 'b_hit_int/F')
+  t_hit.Branch('hit_int'  , b_hit_energy , 'b_hit_energy/F')
+  t_hit.Branch('hit_true' , b_hit_true   , 'b_hit_true/F')
   ##############################################################################
     
   for i in range(len(flat)):
-    b_hit_cnn[0]  = flat[i]
-    b_hit_int[0]  = e_flat[i]
-    b_hit_true[0] = true_flat[i]
+    b_hit_cnn[0]    = flat[i]
+    b_hit_int[0]    = q_flat[i]
+    b_hit_energy[0] = e_flat[i]
+    b_hit_true[0]   = true_flat[i]
     t_hit.Fill()
   
   threshes = [0.1, 0.3, 0.5, 0.7, 0.9, 1 - 1e-2, 1 - 1e-3, 1 - 1e-4, 1 - 1e-5, 
@@ -220,13 +227,15 @@ with sess.as_default():
     b_thresh[0] = thresh
       
     print ('Evaluating performance metrics at threshold' + str(thresh))
-    hcs, ecs             = [0.] * len(predictions), [0.] * len(predictions)
-    hps, eps             = [0.] * len(predictions), [0.] * len(predictions)
-    integratedQs, recoQs = [], []
-    integratedEs, recoEs = [], []
-    normDiffQs           = []
-    normDiffEs           = []
-    nHits                = []
+    hcs, ecs                   = [0.] * len(predictions), [0.] * len(predictions)
+    hps, eps                   = [0.] * len(predictions), [0.] * len(predictions)
+    integratedQs, recoQs       = [], []
+    integratedEs, recoEs       = [], []
+    integratedTrues, recoTrues = [], []
+    normDiffQs                 = []
+    normDiffEs                 = []
+    normDiffTrues              = []
+    nHits                      = []
     
     for i in range(len(predictions)):
       if i % 100 == 0: print (i)
@@ -236,13 +245,16 @@ with sess.as_default():
       energy     = test_e[i][0]
       nHitImage  = NHits(predictions[i], thresh)
       
-      integratedQ = TrueEnergy(test_y[i], test_charge[i])
-      recoQ       = RecoEnergy(predictions[i], test_charge[i], thresh)
-      integratedE = TrueEnergy(test_y[i], test_true[i])
-      recoE       = RecoEnergy(predictions[i], test_true[i], thresh)
+      integratedQ    = TrueEnergy(test_y[i], test_charge[i])
+      recoQ          = RecoEnergy(predictions[i], test_charge[i], thresh)
+      integratedE    = TrueEnergy(test_y[i], test_energy[i])
+      recoE          = RecoEnergy(predictions[i], test_energy[i], thresh)
+      integratedTrue = TrueEnergy(test_y[i], test_true[i])
+      recoTrue       = RecoEnergy(predictions[i], test_true[i], thresh)
       
-      normDiffQ = (recoQ - integratedQ) / integratedQ
-      normDiffE = (recoE - integratedE) / integratedE
+      normDiffQ    = (recoQ - integratedQ) / integratedQ
+      normDiffE    = (recoE - integratedE) / integratedE
+      normDiffTrue = (recoTrue - integratedTrue) / integratedTrue
       
       hc   = HitCompleteness(predictions[i], test_y[i], nTrue, thresh)
       ec   = EnergyCompleteness(predictions[i], test_y[i], test_true[i], thresh)
@@ -251,6 +263,8 @@ with sess.as_default():
       
       if not (normDiffQ == normDiffQ and normDiffQ != float('inf')): continue 
       if not (normDiffE == normDiffE and normDiffE != float('inf')): continue 
+      if not (normDiffTrue == normDiffTrue and 
+              normDiffTrue != float('inf')): continue  
       
       b_inv_thresh[0] = 1. / (1. - thresh)
       b_energy[0]     = energy
@@ -260,6 +274,7 @@ with sess.as_default():
       b_ep[0]         = ep
       b_ndq[0]        = normDiffQ
       b_nde[0]        = normDiffE
+      b_ndt[0]        = normDiffTrue
       b_nt[0]         = nTrue
       b_nti[0]        = nTrueImage
       b_nhi[0]        = nHitImage
@@ -267,6 +282,8 @@ with sess.as_default():
       b_rq[0]         = recoQ
       b_ie[0]         = integratedE
       b_re[0]         = recoE
+      b_it[0]         = integratedTrue
+      b_rt[0]         = recoTrue
       
       t_ev.Fill()
       
@@ -274,8 +291,11 @@ with sess.as_default():
       recoQs.append(recoQ)
       integratedEs.append(integratedE)
       recoEs.append(recoE)
+      integratedTrues.append(integratedTrue)
+      recoTrues.append(recoTrue)
       normDiffQs.append(normDiffQ)
       normDiffEs.append(normDiffE)
+      normDiffTrues.append(normDiffTrue)
       nHits.append(nHitImage)
       hcs.append(hc)
       ecs.append(ec)
