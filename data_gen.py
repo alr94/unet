@@ -34,58 +34,61 @@ class DataGenerator(keras.utils.Sequence):
     self.TDir  = self.TFile.Get(dirname)
     
     self.data_types = []
-    for k in self.TDir.GetListOfKeys():
-      keyType = k.GetName().split('_')[-1] 
-      if keyType not in self.data_types: self.data_types.append(keyType)
-    
-    self.keys     = defaultdict()
-    for data_type in self.data_types:
-      self.keys[data_type] = [k for k in self.TDir.GetListOfKeys()
-                              if data_type == k.GetName().split('_')[-1]]
+    event = self.TDir.GetListOfKeys()[0].ReadObj()
+    for evKey in event.GetListOfKeys():
+      if evKey.GetClassName() == "TTree": continue
+      keyType = evKey.GetName()
+      if keyType not in self.data_types : self.data_types.append(keyType)
+        
+    # Previous method before changing the folder structure in the root files
+    #self.keys     = defaultdict()
+    #for data_type in self.data_types:
+    #  self.keys[data_type] = [k for k in self.TDir.GetListOfKeys()
+    #                          if data_type == k.GetName().split('_')[-1]]
+    self.keys = [k for k in self.TDir.GetListOfKeys()]
       
-    self.energies = [k.GetName().split('_')[3][6:] for k in 
-                     self.TDir.GetListOfKeys() if 'wire' == 
-                     k.GetName().split('_')[-1]]
+    if dataset_type != 'data':
+      self.energies = [k.GetName().split('_')[3][6:] for k in 
+                       self.TDir.GetListOfKeys()]
     
-    val_size   = int(np.floor(len(self.keys['wire']) * self.val_frac))
-    test_size  = int(np.floor(len(self.keys['wire']) * self.test_frac))
-    train_size = len(self.keys['wire']) - val_size - test_size
+    val_size   = int(np.floor(len(self.keys) * self.val_frac))
+    test_size  = int(np.floor(len(self.keys) * self.test_frac))
+    train_size = len(self.keys) - val_size - test_size
     
     if self.dataset_type   == 'train':
-      for data_type in self.data_types:
-        self.keys[data_type] = self.keys[data_type][:train_size]
+      self.keys = self.keys[:train_size]
     elif self.dataset_type == 'val':
-      for data_type in self.data_types:
-        self.keys[data_type] = self.keys[data_type][train_size:
-                                                    train_size + val_size]
+      self.keys = self.keys[train_size: train_size + val_size]
     elif self.dataset_type == 'test':
-      for data_type in self.data_types:
-        self.keys[data_type] = self.keys[data_type][train_size + val_size:]
+      self.keys = self.keys[train_size + val_size:]
       
-    print ('Filtering initial data')
-    nan_index = [ True for i in range(len(self.keys['wire'])) ]
-    for data_type in self.data_types:
-      print(data_type)
-      for i in range(len(self.keys[data_type])):
-        key        = self.keys[data_type][i]
-        test_hist  = key.ReadObj()
-        test_array = root_numpy.hist2array(test_hist)[self.n_crop:-self.n_crop, 
-                                                      self.n_crop:-self.n_crop]
-        ROOT.SetOwnership(test_hist, True)
-        if np.isnan(np.sum(test_array)): nan_index[i] = False
-          
-    self.energies = [d for d, s in itertools.izip(self.energies, nan_index) 
-                     if s]
+    # print ('Filtering initial data')
+    # print (len(self.keys['wire']))
+    # nan_index = [ True for i in range(len(self.keys['wire'])) ]
+    # for data_type in self.data_types:
+    #   print(data_type)
+    #   for i in range(len(self.keys[data_type])):
+    #     key        = self.keys[data_type][i]
+    #     test_hist  = key.ReadObj()
+    #     test_array = root_numpy.hist2array(test_hist)[self.n_crop:-self.n_crop, 
+    #                                                   self.n_crop:-self.n_crop]
+    #     ROOT.SetOwnership(test_hist, True)
+    #     if np.isnan(np.sum(test_array)): nan_index[i] = False
+    #       
+    # print (len(self.keys['wire']))
     
-    for data_type in self.data_types:
-      self.keys[data_type] =  [d for d, s in 
-                               itertools.izip(self.keys[data_type], nan_index) 
-                               if s]
+    # self.energies = [d for d, s in itertools.izip(self.energies, nan_index) 
+    #                  if s]
+    
+    # for data_type in self.data_types:
+    #   self.keys[data_type] =  [d for d, s in 
+    #                            itertools.izip(self.keys[data_type], nan_index) 
+    #                            if s]
     
     self.on_epoch_end()
     
   def __len__(self):
-    return int(np.floor(len(self.keys['wire']) / self.batch_size))
+    return int(np.floor(len(self.keys) / self.batch_size))
   
   def __getitem__(self, batch_index):
     
@@ -106,7 +109,8 @@ class DataGenerator(keras.utils.Sequence):
     X = np.empty((self.batch_size, self.patch_w, self.patch_h, 1))
     
     for sample_num, key_index in enumerate(key_indexes):
-      hist = self.keys[key][key_index].ReadObj()
+      tempDir = self.keys[key_index].ReadObj()
+      hist    = tempDir.Get(key)
       X[sample_num,..., 0] = root_numpy.hist2array(hist)[self.n_crop:-self.n_crop , self.n_crop:-self.n_crop]
       ROOT.SetOwnership(hist, True)
     
@@ -124,7 +128,7 @@ class DataGenerator(keras.utils.Sequence):
     return X
     
   def on_epoch_end(self):
-    self.indexes = np.arange(len(self.keys['wire']))
+    self.indexes = np.arange(len(self.keys))
     if self.shuffle == True:
       np.random.shuffle(self.indexes)
     
@@ -137,9 +141,9 @@ class DataGenerator(keras.utils.Sequence):
       
       if self.patch_depth == 3:
             
-        wire_hist = self.keys['wire'][key_index].ReadObj()
-        em_hist   = self.keys['cluem'][key_index].ReadObj()
-        mich_hist = self.keys['clumichel'][key_index].ReadObj()
+        wire_hist = self.keys[key_index].ReadObj().Get( 'wire' )
+        em_hist   = self.keys[key_index].ReadObj().Get( 'cluem' )
+        mich_hist = self.keys[key_index].ReadObj().Get( 'clumichel' )
         
         X[sample_num,..., 0] = root_numpy.hist2array(wire_hist)[self.n_crop:-self.n_crop , self.n_crop:-self.n_crop]
         X[sample_num,..., 1] = root_numpy.hist2array(em_hist)[self.n_crop:-self.n_crop , self.n_crop:-self.n_crop]
@@ -151,8 +155,8 @@ class DataGenerator(keras.utils.Sequence):
       
       elif self.patch_depth == 2:
             
-        wire_hist = self.keys['wire'][key_index].ReadObj()
-        em_hist   = self.keys['cluem'][key_index].ReadObj()
+        wire_hist = self.keys[key_index].ReadObj().Get( 'wire' )
+        em_hist   = self.keys[key_index].ReadObj().Get( 'cluem' )
         
         X[sample_num,..., 0] = root_numpy.hist2array(wire_hist)[self.n_crop:-self.n_crop , self.n_crop:-self.n_crop]
         X[sample_num,..., 1] = root_numpy.hist2array(em_hist)[self.n_crop:-self.n_crop , self.n_crop:-self.n_crop]
@@ -161,12 +165,12 @@ class DataGenerator(keras.utils.Sequence):
         ROOT.SetOwnership(em_hist, True)
         
       else:
-        wire_hist = self.keys['wire'][key_index].ReadObj()
+        wire_hist = self.keys[key_index].ReadObj().Get( 'wire' )
         X[sample_num, ..., 0] = root_numpy.hist2array(wire_hist)[self.n_crop:-self.n_crop , self.n_crop:-self.n_crop]
         ROOT.SetOwnership(wire_hist, True)
       
       if self.dataset_type != 'data':
-        truth_hist = self.keys['truth'][key_index].ReadObj()
+        truth_hist = self.keys[key_index].ReadObj().Get( 'truth' )
         Y[sample_num, ..., 0] = root_numpy.hist2array(truth_hist)[self.n_crop:-self.n_crop , self.n_crop:-self.n_crop]
         ROOT.SetOwnership(truth_hist, True)
       
