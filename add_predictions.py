@@ -93,7 +93,7 @@ with sess.as_default():
   else: 
     predictions = model.predict_generator(test_gen, verbose = 1, steps = steps)
   
-  fname = test_gen.TFile.GetName().split('MichelEnergyImage')[0] + 'pred.root'
+  fname = test_gen.TFile.GetName().split('Image')[0] + 'Prediction' + test_gen.TFile.GetName().split('Image')[1]
   f = ROOT.TFile(fname, 'RECREATE')
   for i, key in enumerate(test_gen.keys):
     if i >= len(predictions): break
@@ -117,3 +117,4 @@ with sess.as_default():
     f.mkdir(dirname + '/' + eventdir)
     f.cd(dirname + '/' + eventdir)
     hist.Write() 
+  print ('Done')

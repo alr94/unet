@@ -13,6 +13,7 @@ parser.add_argument('-g', '--gpu',     help = 'Which GPU index', default = '0')
 parser.add_argument('-e', '--epochs',  help = 'Number of epochs', type = int, 
                     default = 5)
 parser.add_argument('-l', '--loss',    help = 'Desired loss', type = float)
+parser.add_argument('-n', '--name',    help = 'Human Name')
 
 args = parser.parse_args()
 
@@ -38,7 +39,7 @@ from keras.optimizers import *
 from keras.preprocessing.image import *
 print ('Using Keras version: ', keras.__version__)
 keras.backend.set_image_data_format('channels_last')
-keras.backend.set_image_dim_ordering('tf')
+# keras.backend.set_image_dim_ordering('tf')
         
 ################################################################################
 # Other setups
@@ -117,12 +118,21 @@ patch_w, patch_h, patch_depth = 160, 160, n_channels
 if use_generator:
   print ('Using generator')
   
-  train_gen = DataGenerator(dataset_type = 'train', batch_size = batch_size, 
-                            root_data = args.input, patch_w = patch_w, 
-                            patch_h = patch_h, patch_depth = n_channels)
-  val_gen   = DataGenerator(dataset_type = 'val', batch_size = batch_size, 
-                            root_data = args.input, patch_w = patch_w, 
-                            patch_h = patch_h, patch_depth = n_channels)
+  train_gen = DataGenerator(root_data = args.input, 
+                            dataset_type = 'train', 
+                            dirname = 'MichelEnergyImage', 
+                            batch_size = batch_size, 
+                            patch_w = patch_w, 
+                            patch_h = patch_h, 
+                            patch_depth = n_channels)
+  
+  val_gen   = DataGenerator(root_data = args.input, 
+                            dataset_type = 'val', 
+                            dirname = 'MichelEnergyImage', 
+                            batch_size = batch_size, 
+                            patch_w = patch_w, 
+                            patch_h = patch_h, 
+                            patch_depth = n_channels)
   
 else:
   print ('Using large batches')
@@ -175,7 +185,7 @@ with sess.as_default():
     
     if args.loss:
       
-      tb_callback = keras.callbacks.TensorBoard(log_dir='log')
+      tb_callback = keras.callbacks.TensorBoard(log_dir='log/' + args.name)
       
       while epoch < args.epochs and loss > args.loss:
         
@@ -197,7 +207,7 @@ with sess.as_default():
           
     else:
       
-      tb_callback = keras.callbacks.TensorBoard(log_dir='log')
+      tb_callback = keras.callbacks.TensorBoard(log_dir='log/' + args.name)
       
       while epoch < args.epochs:
         
@@ -268,9 +278,13 @@ SaveModel(model, 'model_epoch' + str(epoch) + '_loss' + str(loss) +
 if use_generator:
   
   print ('Evaluating model on test set')
-  test_gen = DataGenerator(dataset_type = 'test', batch_size = batch_size, 
-                           root_data = args.input, patch_w = patch_w, 
-                           patch_h = patch_h, patch_depth = n_channels)
+  test_gen = DataGenerator(root_data = args.input, 
+                           dataset_type = 'test', 
+                           dirname = 'MichelEnergyImage', 
+                           batch_size = batch_size, 
+                           patch_w = patch_w, 
+                           patch_h = patch_h, 
+                           patch_depth = n_channels)
   score = model.evaluate_generator(test_gen)
   print (score)
 

@@ -10,7 +10,7 @@ from keras.optimizers import *
 from keras.preprocessing.image import *
 from keras.layers.advanced_activations import LeakyReLU, PReLU
 keras.backend.set_image_data_format('channels_last')
-keras.backend.set_image_dim_ordering('tf')
+# keras.backend.set_image_dim_ordering('tf')
 
 import keras_segmentation
 

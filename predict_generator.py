@@ -51,46 +51,9 @@ from array import array
 ################################################################################
 # My stuff
 from losses import *
+from performance_metrics import *
 from unet import *
 from data_gen import DataGenerator
-
-################################################################################
-# My metrics
-def RecoEnergy(pred, energy, thresh):
-  threshed   = (pred > thresh).astype(float)
-  e_selected = np.sum(np.abs(threshed * energy))
-  return e_selected
-
-def RecoEnergyHitCut(pred, energy, thresh):
-  threshed   = (pred > thresh).astype(float)
-  mask       = (energy > 0.75).astype(float)
-  e_threshed = energy * mask
-  e_selected = np.sum(np.abs(threshed * e_threshed))
-  return e_selected
-  
-def NHits(pred, thresh):
-  threshed   = (pred > thresh).astype(float)
-  n_selected = np.sum(np.abs(threshed))
-  return n_selected
-
-def Locations(pred, thresh):
-  locs = np.argwhere(pred > thresh)
-  return locs
-
-def HitDistances(pred, thresh):
-  
-  distances = ROOT.vector('float')()
-  shape     = pred.shape
-  
-  locs = Locations(pred, thresh)
-  locs = locs - [shape[0]/2, shape[1]/2, 0]
-  return (np.linalg.norm(locs, axis=1))
-  
-  # for loc in locs:
-  #   dist = math.sqrt((loc[0])**2 + (loc[1])**2)
-  #   distances.push_back(dist)
-  # return distances
-    
     
 ################################################################################
 
@@ -230,6 +193,7 @@ with sess.as_default():
     print ('Thresh', thresh)
     
     b_thresh[0] = thresh
+    b_inv_thresh[0] = 1. / (1. - thresh)
     
     for i in range(len(predictions)):
       # print (i , len(predictions))
@@ -241,7 +205,6 @@ with sess.as_default():
       recoE         = RecoEnergy(predictions[i], test_energy[i], thresh)
       # recoEThreshed = RecoEnergyHitCut(predictions[i], test_energy[i], thresh)
       
-      b_inv_thresh[0] = 1. / (1. - thresh)
       b_nhi[0]        = nHitImage
       b_rq[0]         = recoQ
       b_re[0]         = recoE

@@ -45,6 +45,7 @@ class DataGenerator(keras.utils.Sequence):
     #for data_type in self.data_types:
     #  self.keys[data_type] = [k for k in self.TDir.GetListOfKeys()
     #                          if data_type == k.GetName().split('_')[-1]]
+    
     self.keys = [k for k in self.TDir.GetListOfKeys()]
       
     if dataset_type != 'data':
@@ -173,5 +174,5 @@ class DataGenerator(keras.utils.Sequence):
         truth_hist = self.keys[key_index].ReadObj().Get( 'truth' )
         Y[sample_num, ..., 0] = root_numpy.hist2array(truth_hist)[self.n_crop:-self.n_crop , self.n_crop:-self.n_crop]
         ROOT.SetOwnership(truth_hist, True)
-      
+        
     return X, Y

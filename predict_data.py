@@ -7,6 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description ='Run CNN training on patches with'
                                  + ' a few different hyperparameter sets.')
 parser.add_argument('-i', '--input',   help = 'Input directory')
+parser.add_argument('-o', '--output',  help = 'Output directory')
 parser.add_argument('-w', '--weights', help = 'Weights file (optional)')
 args = parser.parse_args()
 
@@ -43,6 +44,7 @@ import matplotlib
 matplotlib.use("agg")
 import matplotlib.pyplot as plt
   
+import ROOT
 from ROOT import TFile, TTree
 from array import array
 
@@ -58,11 +60,35 @@ def RecoEnergy(pred, energy, thresh):
   threshed   = (pred > thresh).astype(float)
   e_selected = np.sum(np.abs(threshed * energy))
   return e_selected
+
+def RecoEnergyHitCut(pred, energy, thresh):
+  threshed   = (pred > thresh).astype(float)
+  mask       = (energy > 0.75).astype(float)
+  e_threshed = energy*mask
+  e_selected = np.sum(np.abs(threshed * e_threshed))
+  return e_selected
   
 def NHits(pred, thresh):
   threshed   = (pred > thresh).astype(float)
   n_selected = np.sum(np.abs(threshed))
   return n_selected
+
+def Locations(pred, thresh):
+  locs = np.argwhere(pred > thresh)
+  return locs
+
+def HitDistances(pred, thresh):
+  
+  distances = ROOT.vector('float')()
+  shape     = pred.shape
+  
+  locs = Locations(pred, thresh)
+  
+  for loc in locs:
+    dist = math.sqrt((loc[0] - (shape[0]/2))**2 + (loc[1] - (shape[1]/2))**2)
+    distances.push_back(dist)
+    
+  return distances
 
 ################################################################################
 
@@ -76,7 +102,6 @@ patch_w, patch_h = 160, 160
 batch_size       = 1
 
 print ('Building data generator')
-# FIXME
 test_gen = DataGenerator(dataset_type = 'data', 
                          dirname = 'MichelEnergyImageData', 
                          batch_size = batch_size, shuffle = False, 
@@ -100,6 +125,12 @@ with sess.as_default():
     test_x[i], test_y[i] = test_gen.__getitem__(i)
     test_charge[i]       = test_gen.getitembykey(i, 'wire')
     test_energy[i]       = test_gen.getitembykey(i, 'energy')
+  
+  # FIXME
+  # test_x      = test_x[:8] 
+  # test_y      = test_y[:8]
+  # test_charge = test_charge[:8]
+  # test_energy = test_energy[:8] 
      
   print ('Making predictions')
   predictions = model.predict(test_x, batch_size = 8, verbose = 1)
@@ -111,22 +142,24 @@ with sess.as_default():
   e_flat = test_energy[..., 0].flatten()[q_flat > 0.1]
   q_flat = q_flat[q_flat > 0.1]
   
-  print (len(flat), len(q_flat))
-  
-  f = TFile('predict_output.root', 'recreate')
+  f = TFile(args.output, 'recreate')
   
   ##############################################################################
   t_ev = TTree('performance_tests', 'Thresholded performance scores')
   b_thresh     = array('f', [0.])
   b_inv_thresh = array('f', [0.])
   b_nhi        = array('f', [0.])
+  b_hd         = ROOT.vector('float')()
   b_rq         = array('f', [0.])
   b_re         = array('f', [0.])
-  t_ev.Branch('thresh'       , b_thresh     , 'b_thresh/F')
-  t_ev.Branch('inv_thresh'   , b_inv_thresh , 'b_inv_thresh/F')
-  t_ev.Branch('n_hits_image' , b_nhi        , 'b_nhi/F')
-  t_ev.Branch('reco_charge'  , b_rq         , 'b_rq/F')
-  t_ev.Branch('reco_energy'  , b_re         , 'b_re/F')
+  b_ret        = array('f', [0.])
+  t_ev.Branch('thresh'        , b_thresh     , 'b_thresh/F')
+  t_ev.Branch('inv_thresh'    , b_inv_thresh , 'b_inv_thresh/F')
+  t_ev.Branch('n_hits_image'  , b_nhi        , 'b_nhi/F')
+  t_ev.Branch('hit_distances' , b_hd)
+  t_ev.Branch('reco_charge'   , b_rq         , 'b_rq/F')
+  t_ev.Branch('reco_energy'   , b_re         , 'b_re/F')
+  t_ev.Branch('reco_energy_threshed'   , b_ret         , 'b_ret/F')
   ##############################################################################
   t_hit = TTree('hit_metrics', 'Thresholded hit scores')
   b_hit_cnn    = array('f', [0.])
@@ -139,7 +172,6 @@ with sess.as_default():
   
   print ('Trees made')
   for i in range(len(flat)):
-    if i % 1000 == 0: print(i, len(flat))
     b_hit_cnn[0]    = flat[i]
     b_hit_int[0]    = q_flat[i]
     b_hit_energy[0] = e_flat[i]
@@ -155,28 +187,25 @@ with sess.as_default():
     print ('Thresh', thresh)
     
     b_thresh[0] = thresh
-      
-    integratedQs, recoQs = [], []
-    integratedEs, recoEs = [], []
-    nHits                = []
     
     for i in range(len(predictions)):
       
       nHitImage  = NHits(predictions[i], thresh)
       
-      recoQ       = RecoEnergy(predictions[i], test_charge[i], thresh)
-      recoE       = RecoEnergy(predictions[i], test_energy[i], thresh)
+      hit_dists = HitDistances(predictions[i], thresh)
+      
+      recoQ         = RecoEnergy(predictions[i], test_charge[i], thresh)
+      recoE         = RecoEnergy(predictions[i], test_energy[i], thresh)
+      recoEThreshed = RecoEnergyHitCut(predictions[i], test_energy[i], thresh)
       
       b_inv_thresh[0] = 1. / (1. - thresh)
       b_nhi[0]        = nHitImage
+      b_hd            = hit_dists
       b_rq[0]         = recoQ
       b_re[0]         = recoE
+      b_ret[0]        = recoEThreshed
       
       t_ev.Fill()
-      
-      recoQs.append(recoQ)
-      recoEs.append(recoE)
-      nHits.append(nHitImage)
       
   print ('Reco tree filled')
         

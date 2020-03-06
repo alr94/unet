@@ -247,3 +247,4 @@ def get_unet_data(inputDir, batch, n_channels):
   p = np.random.permutation(len(x_data))
   
   return copy.deepcopy(x_data[p]), copy.deepcopy(y_data[p])
+
