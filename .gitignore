@@ -19,3 +19,4 @@ log/
 *.bak
 data_img/
 output/
+data_gen_test.py
