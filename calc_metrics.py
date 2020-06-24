@@ -70,6 +70,11 @@ t_ev.Branch('primary_EndZ'    , b_p_ez  , 'b_p_ez/F')
 t_ev.Branch('primary_HasT0'   , b_p_ht0 , 'b_p_ht0/F')
 t_ev.Branch('primary_HasT0'   , b_p_t0  , 'b_p_t0/F')
 
+# Michel params
+if args.datatype == 'MC':
+  b_m_te  = array('f', [0.])
+  t_ev.Branch('trueMichelEnergy' , b_m_te  , 'b_m_te/F')
+
 # Daughter params
 b_d_nh  = array('f', [0.])
 b_d_nmh = array('f', [0.])
@@ -90,10 +95,12 @@ t_ev.Branch('daughter_DistPrimZ'    , b_d_dpz , 'b_d_dpz/F')
 b_hit_cnn    = ROOT.std.vector('double')()
 b_hit_int    = ROOT.std.vector('double')()
 b_hit_energy = ROOT.std.vector('double')()
+b_hit_truth = ROOT.std.vector('double')()
 
 t_ev.Branch('hit_cnn'    , b_hit_cnn)
 t_ev.Branch('hit_int'    , b_hit_int)
 t_ev.Branch('hit_energy' , b_hit_energy)
+t_ev.Branch('hit_truth' , b_hit_truth)
 
 ##############################################################################
 
@@ -158,26 +165,34 @@ for filename in os.listdir(args.data):
                                                          ncrop:-ncrop]
     energy = root_numpy.hist2array(data_dir.Get('energy'))[ncrop:-ncrop, 
                                                            ncrop:-ncrop]
+    if args.datatype == 'MC':
+      truth   = root_numpy.hist2array(data_dir.Get('truth'))[ncrop:-ncrop, 
+                                                             ncrop:-ncrop]
     pred   = root_numpy.hist2array(pred_dir.Get('prediction'))
-
+    
     # Get flattened data, filtered by wire value
     wire_flat   = wire.flatten()
     energy_flat = energy.flatten()[wire_flat > 0.1]
     pred_flat   = pred.flatten()[wire_flat > 0.1]
+    if args.datatype == 'MC': truth_flat = truth.flatten()[wire_flat > 0.1]
     wire_flat   = wire_flat[wire_flat > 0.1]
     
     # Clear vectors and fill with new event
     b_hit_cnn.clear()
     b_hit_int.clear()
     b_hit_energy.clear()
+    b_hit_truth.clear()
     for i in range(len(wire_flat)):
       b_hit_cnn.push_back(pred_flat[i])
       b_hit_int.push_back(wire_flat[i])
       b_hit_energy.push_back(energy_flat[i])
+      if args.datatype == 'MC': b_hit_truth.push_back(float(truth_flat[i]))
   
     # Get primary and daughter parameters from tree
     tree  = data_dir.Get('param tree')
     for entry in tree:
+
+      if args.datatype == 'MC': b_m_te[0]  = entry.trueMichelEnergy
       b_p_id[0]  = entry.primaryID
       b_p_vx[0]  = entry.VertexX
       b_p_vy[0]  = entry.VertexY

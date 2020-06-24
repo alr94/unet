@@ -65,7 +65,7 @@ n_channels       = 3
 conv_depth       = 3
 patch_w, patch_h = 160, 160
 batch_size       = 64
-steps            = 0
+steps            = 1
 
 print ('Building data generator')
 test_gen = DataGenerator(dataset_type = 'data', 

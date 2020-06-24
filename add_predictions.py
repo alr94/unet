@@ -61,18 +61,25 @@ from data_gen import DataGenerator
 if not (args.input and args.weights):
   print ('Please provide data, model, and weights')
   exit()
+
+fname = args.input.split('Image')[0] + 'Prediction' + args.input.split('Image')[1]
+print (os.path.basename(fname))
+if os.path.basename(fname) in os.listdir(os.path.dirname(args.input)): 
+  print ('Already predicted this file, skipping.')
+  exit()
   
 ################################################################################
 dataset_type     = 'data'
-dirname          = 'MichelEnergyImage'
-n_channels       = 3
-conv_depth       = 3
+dirname          = 'MichelEnergyImageData' if 'Data' in args.input else 'MichelEnergyImage'
+n_channels       = 1
+conv_depth       = 2
 patch_w, patch_h = 160, 160
-batch_size       = 64
-steps            = 0
+batch_size       = 16
+steps            = 1
 
 ################################################################################
 print ('Building data generator')
+
 test_gen = DataGenerator(dataset_type = dataset_type, 
                          dirname = dirname, 
                          batch_size = batch_size, shuffle = False, 
@@ -84,8 +91,14 @@ sess = tf.InteractiveSession()
 with sess.as_default():
   
   print ('Loading model')
-  model     = unet(inputshape = (patch_w, patch_h, n_channels), 
-                   conv_depth = conv_depth)
+  if 'inception' in args.weights:
+    model     = inception_unet(inputshape = (patch_w, patch_h, n_channels), 
+                               conv_depth = conv_depth,
+                               number_base_nodes = int(args.weights.split('_')[2][:2]))
+  else:
+    model     = unet(inputshape = (patch_w, patch_h, n_channels), 
+                               conv_depth = conv_depth)
+    
   model.load_weights(args.weights)
   
   if steps == 0: 
@@ -93,9 +106,11 @@ with sess.as_default():
   else: 
     predictions = model.predict_generator(test_gen, verbose = 1, steps = steps)
   
-  fname = test_gen.TFile.GetName().split('Image')[0] + 'Prediction' + test_gen.TFile.GetName().split('Image')[1]
+  print ('Saving to ' + fname)
+  
   f = ROOT.TFile(fname, 'RECREATE')
   for i, key in enumerate(test_gen.keys):
+    
     if i >= len(predictions): break
     # if i >= 1: break
     
@@ -109,6 +124,8 @@ with sess.as_default():
     arr[1:1 + predictions[i].shape[0], 
         1:1 + predictions[i].shape[1]] = predictions[i][:,:,0]
     
+    arr[arr < 0.001] = 0.
+    
     # Fill hist and write
     root_numpy.array2hist(arr, hist)
     
@@ -117,4 +134,5 @@ with sess.as_default():
     f.mkdir(dirname + '/' + eventdir)
     f.cd(dirname + '/' + eventdir)
     hist.Write() 
-  print ('Done')
+    
+print ('Done')

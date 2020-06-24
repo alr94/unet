@@ -11,9 +11,9 @@ parser.add_argument('-w', '--weights', help = 'Weights file (optional)')
 parser.add_argument('-m', '--model',   help = 'Model file (optional)')
 parser.add_argument('-g', '--gpu',     help = 'Which GPU index', default = '0')
 parser.add_argument('-e', '--epochs',  help = 'Number of epochs', type = int, 
-                    default = 5)
+                    default = 10)
 parser.add_argument('-l', '--loss',    help = 'Desired loss', type = float)
-parser.add_argument('-n', '--name',    help = 'Human Name')
+parser.add_argument('-s', '--save',    help = 'Save Model?')
 
 args = parser.parse_args()
 
@@ -96,7 +96,7 @@ def TrainWithGenerator(train_gen, tb_callback, model, epochs = 1,
                        val_gen = None):
   print ('Fitting with generator')
   if not val_gen:
-    h = model.fit_generator(train_gen, shuffle = True, epochs = epochs, 
+    h = model.fit_generator(train_gen, shuffle = True, epochs = epochs,
                             callbacks = [ tb_callback ])
   else:
     h = model.fit_generator(train_gen, validation_data = val_gen, 
@@ -105,18 +105,29 @@ def TrainWithGenerator(train_gen, tb_callback, model, epochs = 1,
   return h
 
 ################################################################################
-# Build dataset generators
-use_vgg       = False
-use_generator = args.input.split('.')[-1] == 'root'
-batch_size    = 8
-n_channels    = 3
+use_generator     = True
+model_type = 'inception'
+
+batch_size        = 1
+test_sample = False
+
+n_channels        = 1
+conv_depth        = 3
+number_base_nodes = 24
 
 patch_w, patch_h, patch_depth = 160, 160, n_channels 
 
-################################################################################ 
+name = model_type 
+name += '_basenodes' + str(number_base_nodes)
+name += '_convdepth' + str(conv_depth)
+name += '_patchsize' + str(patch_w)
+name += '_final'
+################################################################################
 
 if use_generator:
   print ('Using generator')
+  
+  number_keys = 100 if test_sample else 0
   
   train_gen = DataGenerator(root_data = args.input, 
                             dataset_type = 'train', 
@@ -124,7 +135,8 @@ if use_generator:
                             batch_size = batch_size, 
                             patch_w = patch_w, 
                             patch_h = patch_h, 
-                            patch_depth = n_channels)
+                            patch_depth = n_channels,
+                            number_keys = number_keys)
   
   val_gen   = DataGenerator(root_data = args.input, 
                             dataset_type = 'val', 
@@ -132,7 +144,8 @@ if use_generator:
                             batch_size = batch_size, 
                             patch_w = patch_w, 
                             patch_h = patch_h, 
-                            patch_depth = n_channels)
+                            patch_depth = n_channels,
+                            number_keys = number_keys)
   
 else:
   print ('Using large batches')
@@ -151,6 +164,14 @@ else:
 sess = tf.InteractiveSession()
 with sess.as_default():
   
+  # Check loss
+  # for i in range(100):
+  #   X, Y = train_gen.__getitem__(i)
+  #   zeros = np.zeros(Y.shape)
+  #   loss = jaccard_distance(Y, zeros)
+  #   print (loss.eval())
+  # exit()
+  
   print ('Building model')
   if args.model: 
     model_json      = open(args.model, 'r')
@@ -158,19 +179,19 @@ with sess.as_default():
     model_json.close()
     model = model_from_json(read_model_json)
   else: 
-    if use_vgg:
+    if model_type == 'vgg': 
       model = vgg_unet(inputshape = (patch_w, patch_h, patch_depth))
-    else:
+    elif model_type == 'inception': 
+      model = inception_unet(inputshape = (patch_w, patch_h, patch_depth), 
+                             conv_depth=conv_depth, 
+                             number_base_nodes = number_base_nodes)
+    else: 
       model = unet(inputshape = (patch_w, patch_h, patch_depth))
   
-  # optimizer = SGD(lr = 0.01)
-  # optimizer = SGD(lr = 0.1, decay = 1E-9, momentum = 0.9, nesterov = True)
-  # optimizer = Adam()
   optimizer = Nadam()
-  # optimizer = RMSprop(lr = 0.01, rho = 0.9, epsilon = 1e-8, decay = 0.0)
-  # optimizer = Adadelta(lr = 1.0, rho = 0.95, epsilon = 1e-8, decay = 0.0)
   
-  model.compile(optimizer = optimizer, loss = jaccard_distance)
+  model.compile(optimizer = optimizer, loss = jaccard_distance,
+                metrics = [efficiency, purity])
   model.summary()
 
   if args.weights: 
@@ -185,12 +206,14 @@ with sess.as_default():
     
     if args.loss:
       
-      tb_callback = keras.callbacks.TensorBoard(log_dir='log/' + args.name)
+      tb_callback = keras.callbacks.TensorBoard(log_dir='log/' + name)
       
-      while epoch < args.epochs and loss > args.loss:
+      while epoch < args.epochs and loss > float(args.loss):
         
         epoch += 1
         print ("Epoch: ", epoch, "of ", args.epochs)
+  
+        # if epoch > 1: optimizer.lr.assign(0.01)
         
         h = TrainWithGenerator(train_gen, tb_callback, model, epochs = 1, 
                                val_gen = val_gen)
@@ -201,19 +224,25 @@ with sess.as_default():
         val_loss = h.history['val_loss'][0]
         val_losses.append(val_loss)
         
-        print ('Saving model checkpoint')
-        SaveModel(model, 'model_epoch' + str(epoch) + '_loss' + str(loss) + 
-                  '_val' + str(val_loss)) 
+        if args.save == 'y':
+          print ('Saving model checkpoint')
+          SaveModel(model, 
+                    name + '_epoch' + str(epoch) + 
+                    '_loss' + str(loss) + 
+                    '_val' + str(val_loss)
+                   ) 
           
     else:
       
-      tb_callback = keras.callbacks.TensorBoard(log_dir='log/' + args.name)
+      tb_callback = keras.callbacks.TensorBoard(log_dir='log/' + name)
       
       while epoch < args.epochs:
         
         epoch += 1
         print ("Epoch: ", epoch, "of ", args.epochs)
         
+        # if epoch > 1: optimizer.lr.assign(0.01)
+          
         h = TrainWithGenerator(train_gen, tb_callback, model, epochs = 1, 
                                val_gen = val_gen)
         
@@ -223,17 +252,22 @@ with sess.as_default():
         val_loss = h.history['val_loss'][0]
         val_losses.append(val_loss)
         
-        print ('Saving model checkpoint')
-        SaveModel(model, 'model_epoch' + str(epoch) + '_loss' + str(loss) + 
-                  '_val' + str(val_loss)) 
-      
+        if args.save == 'y':
+          print ('Saving model checkpoint')
+          SaveModel(model, 
+              name + '_epoch' + str(epoch) + 
+                    '_loss' + str(loss) + 
+                    '_val' + str(val_loss)
+                   ) 
   else:
     if args.loss:
       
-      while epoch < args.epochs and loss > args.loss:
+      while epoch < args.epochs and loss > float(args.loss):
         
         epoch += 1
         print ("Epoch: ", epoch, "of ", args.epochs)
+        
+        # if epoch > 1: optimizer.lr.assign(0.01)
         
         shuffle(train_batches)
         for batch in train_batches:
@@ -246,16 +280,21 @@ with sess.as_default():
           val_loss = h.history['val_loss'][0]
           val_losses.append(val_loss)
           
-        print ('Saving model checkpoint')
-        SaveModel(model, 'model_epoch' + str(epoch) + '_loss' + str(loss) + 
-                  '_val' + str(val_loss)) 
-          
+        if args.save == 'y':
+          print ('Saving model checkpoint')
+          SaveModel(model, 
+              name + '_epoch' + str(epoch) + 
+                    '_loss' + str(loss) + 
+                    '_val' + str(val_loss)
+                   ) 
     else:
       while epoch < args.epochs:
         
         epoch += 1
         print ("Epoch: ", epoch, "of ", args.epochs)
         
+        # if epoch > 1: optimizer.lr.assign(0.01)
+        
         shuffle(train_batches)
         for batch in train_batches:
           h = TrainOnBatch(batch, args, model, val_x, val_y, batch_size, 
@@ -267,13 +306,21 @@ with sess.as_default():
           val_loss = h.history['val_loss'][0]
           val_losses.append(val_loss)
         
-        print ('Saving model checkpoint')
-        SaveModel(model, 'model_epoch' + str(epoch) + '_loss' + str(loss) + 
-                  '_val' + str(val_loss)) 
+        if args.save == 'y':
+          print ('Saving model checkpoint')
+          SaveModel(model, 
+              name + '_epoch' + str(epoch) + 
+                    '_loss' + str(loss) + 
+                    '_val' + str(val_loss)
+                   ) 
         
-print ('Saving model checkpoint')
-SaveModel(model, 'model_epoch' + str(epoch) + '_loss' + str(loss) + 
-          '_val' + str(val_loss)) 
+if args.save == 'y':
+  print ('Saving model checkpoint')
+  SaveModel(model, 
+      name + '_epoch' + str(epoch) + 
+            '_loss' + str(loss) + 
+            '_val' + str(val_loss)
+           ) 
 
 if use_generator:
   
@@ -288,14 +335,14 @@ if use_generator:
   score = model.evaluate_generator(test_gen)
   print (score)
 
-  test_x = np.zeros((batch_size * test_gen.__len__(), patch_w, patch_h, 
-    n_channels))
-  test_y = np.zeros((batch_size * test_gen.__len__(), patch_w, patch_h, 1))
-  
-  for i in range(test_gen.__len__()):
-    x, y = test_gen.__getitem__(i)
-    test_x[i * batch_size: (i + 1) * batch_size] = x
-    test_y[i * batch_size: (i + 1) * batch_size] = y
+  # test_x = np.zeros((batch_size * test_gen.__len__(), patch_w, patch_h, 
+  #   n_channels))
+  # test_y = np.zeros((batch_size * test_gen.__len__(), patch_w, patch_h, 1))
+  # 
+  # for i in range(test_gen.__len__()):
+  #   x, y = test_gen.__getitem__(i)
+  #   test_x[i * batch_size: (i + 1) * batch_size] = x
+  #   test_y[i * batch_size: (i + 1) * batch_size] = y
     
   plot = plt.plot(losses)
   plt.savefig('img/losses.png')
