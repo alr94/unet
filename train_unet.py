@@ -6,11 +6,11 @@ from __future__ import print_function
 import argparse 
 parser = argparse.ArgumentParser(description ='Run CNN training on patches with'
                                  + ' a few different hyperparameter sets.')
-parser.add_argument('-i', '--input',   help = 'Input directory')
-parser.add_argument('-w', '--weights', help = 'Weights file (optional)')
-parser.add_argument('-m', '--model',   help = 'Model file (optional)')
-parser.add_argument('-g', '--gpu',     help = 'Which GPU index', default = '0')
-parser.add_argument('-e', '--epochs',  help = 'Number of epochs', type = int, 
+parser.add_argument('-i' , '--input' , help = 'Input list')
+parser.add_argument('-w' , '--weights'   , help = 'Weights file (optional)')
+parser.add_argument('-m' , '--model'     , help = 'Model file (optional)')
+parser.add_argument('-g' , '--gpu'       , help = 'Which GPU index'          , default = '0')
+parser.add_argument('-e' , '--epochs'    , help = 'Number of epochs'         , type = int                  ,
                     default = 10)
 parser.add_argument('-l', '--loss',    help = 'Desired loss', type = float)
 parser.add_argument('-s', '--save',    help = 'Save Model?')
@@ -108,17 +108,19 @@ def TrainWithGenerator(train_gen, tb_callback, model, epochs = 1,
 use_generator     = True
 model_type = 'inception'
 
-batch_size        = 1
+batch_size  = 1
 test_sample = False
 
 n_channels        = 1
-conv_depth        = 3
+conv_depth        = 4
 number_base_nodes = 24
+number_layers     = 5
 
 patch_w, patch_h, patch_depth = 160, 160, n_channels 
 
 name = model_type 
 name += '_basenodes' + str(number_base_nodes)
+name += '_layers' + str(number_layers)
 name += '_convdepth' + str(conv_depth)
 name += '_patchsize' + str(patch_w)
 name += '_final'
@@ -137,7 +139,7 @@ if use_generator:
                             patch_h = patch_h, 
                             patch_depth = n_channels,
                             number_keys = number_keys)
-  
+    
   val_gen   = DataGenerator(root_data = args.input, 
                             dataset_type = 'val', 
                             dirname = 'MichelEnergyImage', 
@@ -184,7 +186,8 @@ with sess.as_default():
     elif model_type == 'inception': 
       model = inception_unet(inputshape = (patch_w, patch_h, patch_depth), 
                              conv_depth=conv_depth, 
-                             number_base_nodes = number_base_nodes)
+                             number_base_nodes = number_base_nodes, 
+                             number_layers = number_layers)
     else: 
       model = unet(inputshape = (patch_w, patch_h, patch_depth))
   
@@ -215,6 +218,7 @@ with sess.as_default():
   
         # if epoch > 1: optimizer.lr.assign(0.01)
         
+          
         h = TrainWithGenerator(train_gen, tb_callback, model, epochs = 1, 
                                val_gen = val_gen)
         

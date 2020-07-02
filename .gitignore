@@ -21,3 +21,4 @@ data_img/
 output/
 data_gen_test.py
 todo*
+*.png

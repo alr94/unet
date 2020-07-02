@@ -75,7 +75,7 @@ n_channels       = 1
 conv_depth       = 2
 patch_w, patch_h = 160, 160
 batch_size       = 16
-steps            = 1
+steps            = 0
 
 ################################################################################
 print ('Building data generator')
@@ -93,8 +93,8 @@ with sess.as_default():
   print ('Loading model')
   if 'inception' in args.weights:
     model     = inception_unet(inputshape = (patch_w, patch_h, n_channels), 
-                               conv_depth = conv_depth,
-                               number_base_nodes = int(args.weights.split('_')[2][:2]))
+                               conv_depth = int(args.weights.split('_')[2][-1]),
+                               number_base_nodes = int(args.weights.split('_')[1][-2:]))
   else:
     model     = unet(inputshape = (patch_w, patch_h, n_channels), 
                                conv_depth = conv_depth)

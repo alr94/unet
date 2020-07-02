@@ -86,6 +86,11 @@ def purity(y_true, y_pred):
   purity = (intersection + smooth) / (sum_ + smooth)
   return tf.reduce_mean(purity)
 
+def pur_eff(y_true, y_pred):
+  pur = purity(y_true, y_pred)
+  eff = efficiency(y_true, y_pred)
+  return - pur * eff
+
 def f_beta(y_true, y_pred):
   beta = 2
   pur = purity(y_true, y_pred)

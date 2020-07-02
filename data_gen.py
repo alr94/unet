@@ -1,5 +1,6 @@
 # vim: tabstop=2 expandtab shiftwidth=2 softtabstop=2
 import numpy as np
+import scipy
 import keras
 
 import ROOT
@@ -8,6 +9,7 @@ import root_numpy
 from collections import defaultdict
 import itertools
 import time
+import os
 
 from losses import *
 
@@ -15,11 +17,15 @@ class DataGenerator(keras.utils.Sequence):
 
   def __init__(self, root_data, dataset_type, dirname, batch_size = 32, 
                shuffle = True, patch_w = 160, patch_h = 160, patch_depth = 3, 
-               val_frac = 0.05, test_frac = 0.05, number_keys = 0):
+               val_frac = 0.2, test_frac = 0.2, number_keys = 0):
     
     self.dataset_type = dataset_type
     self.val_frac  = val_frac
     self.test_frac = test_frac
+    
+    self.augment   = True if dataset_type == 'train' else False
+    # self.augment   = False # FIXME
+    self.n_augment = 2 if self.augment else 1
     
     self.batch_size   = batch_size
     self.shuffle      = shuffle
@@ -31,7 +37,7 @@ class DataGenerator(keras.utils.Sequence):
     
     self.n_crop = int((320 - patch_w)/ 2)
     
-    self.TFile  = ROOT.TFile(root_data)
+    self.TFile  = ROOT.TFile(root_data.strip())
     self.TDir   = self.TFile.Get(dirname)
     self.TTree  = self.TDir.Get('param tree')
     
@@ -66,24 +72,69 @@ class DataGenerator(keras.utils.Sequence):
       self.keys = self.keys[train_size: train_size + val_size]
     elif self.dataset_type == 'test':
       self.keys = self.keys[train_size + val_size:]
+    
+    print (len(self.keys))
       
     # FIXME
-    print ('Filtering initial data')
-    print (len(self.keys))
-    good_indices = [ True for _ in range(len(self.keys)) ]
-    for index, key in enumerate(self.keys):
-      
-      if index % 1000 == 0: print (index, len(self.keys))
-      
-      tree = key.ReadObj().GetListOfKeys()[-1].ReadObj()
-      
-      if tree.GetEntriesFast() > 1: good_indices[index] = False
-      
-      calibfrac = tree.GetMaximum('CalibFrac')
-      if calibfrac < 0.5: good_indices[index] = False
-      
-    self.keys = [k for i, k in enumerate(self.keys) if good_indices[i]]
-    print (len(self.keys))
+    # Approximate number of events in energy bins
+    # 0-15  : 5250
+    # 15-35 : 32000
+    # 35-50 : 5250
+    # 1:6:1
+    # Probability for keeping events with middle energy = 1/6 
+    # print ('Filtering initial data')
+    # self.e_all = []
+    # self.e_sel = []
+    # good_indices = [ True for _ in range(len(self.keys)) ]
+    # 
+    # t0 = time.time()
+    # for index, key in enumerate(self.keys):
+    #   
+    #   if index % 1000 == 0: 
+    #     print (index, len(self.keys), time.time() - t0 )
+    #     t0 = time.time()
+    #   
+    #   truthhist = key.ReadObj().Get('truth')
+    #   if truthhist.GetMaximum() < 0.5: 
+    #     good_indices[index] = False
+    #     ROOT.SetOwnership(truthhist, True)
+    #     continue
+    #   ROOT.SetOwnership(truthhist, True)
+    #   
+    #   tree = key.ReadObj().GetListOfKeys()[-1].ReadObj()
+    #   
+    #   if tree.GetEntries() != 1: 
+    #     good_indices[index] = False
+    #     ROOT.SetOwnership(tree, True)
+    #     continue
+    #   
+    #   for entry in tree:
+    #     
+    #     if entry.CalibFrac < 0.5:
+    #       good_indices[index] = False
+    #       ROOT.SetOwnership(tree, True)
+    #       break
+    #     
+    #     if entry.totalTrueIonE < 0.01:
+    #       good_indices[index] = False
+    #       ROOT.SetOwnership(tree, True)
+    #       break
+    #       
+    #     random = np.random.random()
+    #     print (entry.totalTrueIonE, random)
+    #         
+    #     self.e_all.append(entry.totalTrueIonE)
+    #     if entry.totalTrueIonE > 15. and entry.totalTrueIonE < 35.:
+    #       if random > 1./6.:
+    #         good_indices[index] = False
+    #         ROOT.SetOwnership(tree, True)
+    #         break
+    #     self.e_sel.append(entry.totalTrueIonE)
+    #   
+    #   ROOT.SetOwnership(tree, True)
+    #   
+    # self.keys = [k for i, k in enumerate(self.keys) if good_indices[i]]
+    # print (len(self.keys))
     
     self.on_epoch_end()
     
@@ -138,8 +189,8 @@ class DataGenerator(keras.utils.Sequence):
     
   def __data_generation(self, key_indexes):
     
-    X = np.empty((self.batch_size, self.patch_w, self.patch_h, self.patch_depth))
-    Y = np.empty((self.batch_size, self.patch_w, self.patch_h, 1))
+    X = np.empty((self.batch_size * self.n_augment, self.patch_w, self.patch_h, self.patch_depth))
+    Y = np.empty((self.batch_size * self.n_augment, self.patch_w, self.patch_h, 1))
     
     for sample_num, key_index in enumerate(key_indexes):
       
@@ -197,5 +248,12 @@ class DataGenerator(keras.utils.Sequence):
         ROOT.SetOwnership(truth_hist, True)
         
     Y[Y > 1.1] = 1.
+    
+    if self.augment:
+      for n_angle in reversed(range(self.n_augment)):
+        angle = 360. * np.random.random()
+        for batch_num in range(self.batch_size):
+          X[(n_angle * self.batch_size) + batch_num] = scipy.ndimage.rotate(X[batch_num], angle, reshape=False)
+          Y[(n_angle * self.batch_size) + batch_num] = scipy.ndimage.rotate(Y[batch_num], angle, reshape=False)
         
     return X, Y

@@ -91,7 +91,6 @@ b_hit_wire        = ROOT.std.vector('double')()
 b_hit_wirecalib   = ROOT.std.vector('double')()
 b_hit_energy      = ROOT.std.vector('double')()
 b_hit_energycalib = ROOT.std.vector('double')()
-b_hit_pred        = ROOT.std.vector('double')()
 b_hit_cnnem       = ROOT.std.vector('double')()
 b_hit_cnnmichel   = ROOT.std.vector('double')()
 b_hit_cluem       = ROOT.std.vector('double')()
@@ -105,7 +104,6 @@ t_ev.Branch('hit_wire'        , b_hit_wire)
 t_ev.Branch('hit_wirecalib'   , b_hit_wirecalib)
 t_ev.Branch('hit_energy'      , b_hit_energy)
 t_ev.Branch('hit_energycalib' , b_hit_energycalib)
-t_ev.Branch('prediction'      , b_hit_pred)
 t_ev.Branch('hit_cnnem'       , b_hit_cnnem)
 t_ev.Branch('hit_cnnmichel'   , b_hit_cnnmichel)
 t_ev.Branch('hit_cluem'       , b_hit_cluem)
@@ -133,21 +131,19 @@ if args.datatype == 'MC':
 
 # Loop over all files in path
 print ('Starting file loop')
-for filename in os.listdir(args.data):
+# for filename in os.listdir(args.data):
+for _ in range(1): # FIXME
+  filename = "MC_Train.root" 
   
   # Basic file checks and filtering
   if filename.split('.')[-1] != 'root': continue
   if args.datatype not in filename: continue
-  if 'Image' not in filename: continue
-  if 'Image_Pred' in filename: continue
   
   # Get filenames and check they exist
   data_filename = args.data + '/' + filename
-  pred_filename = args.data + '/' + "_".join(filename.split('_')[:2]) + '_Prediction_' + "_".join(filename.split('_')[3:])
   
   if os.path.isfile(data_filename):
     input_data = ROOT.TFile(data_filename, 'READ')
-    pred_data = ROOT.TFile(pred_filename, 'READ')
   else: 
     print ("Filename not valid")
     continue
@@ -155,10 +151,9 @@ for filename in os.listdir(args.data):
   
   # Get top level directory
   data_base_dir = input_data.Get(dirname)
-  pred_base_dir = pred_data.Get(dirname)
   
   # Find common set of keys based on title
-  keys = [key for key in pred_base_dir.GetListOfKeys()]
+  keys = [key for key in data_base_dir.GetListOfKeys()]
   
   # Basic check for key matching 
   n_keys = len(keys)
@@ -168,24 +163,18 @@ for filename in os.listdir(args.data):
   
   # Calculate number of iterations to make and loop on keys
   n_steps = min(n_keys, samples) if samples > 0 else n_keys
-  for i_key in range(n_steps):
+  # for i_key in range(n_steps):
+  for i_key in range(5000):
     
     if i_key % 1000 == 0: print (str(i_key) + ' / ' + str(n_steps))
     
     # get directory
     key = keys[i_key]
     data_dir = data_base_dir.Get(key.GetName())
-    pred_dir = key.ReadObj()
-    
-    try:
-      npred = pred_dir.Get('prediction').GetEntries()
-    except:
-      continue
-    cnnpred = root_numpy.hist2array(pred_dir.Get('prediction'))
     
     # Get event data
     wire        = root_numpy.hist2array(data_dir.Get('wire'))
-    ncut = (wire.shape[0] - cnnpred.shape[0]) / 2
+    ncut = (wire.shape[0] - 160) / 2
     wire        = wire[ncut:-ncut, ncut:-ncut]
     
     wirecalib   = root_numpy.hist2array(data_dir.Get('wireCalib'))[ncut:-ncut, ncut:-ncut]
@@ -210,7 +199,6 @@ for filename in os.listdir(args.data):
     wirecalib_flat   = wirecalib.flatten()[wire_flat > 0.1]
     energy_flat      = energy.flatten()[wire_flat > 0.1]
     energycalib_flat = energycalib.flatten()[wire_flat > 0.1]
-    cnnpred_flat     = cnnpred.flatten()[wire_flat > 0.1]
     cnnem_flat       = cnnem.flatten()[wire_flat > 0.1]
     cnnmichel_flat   = cnnmichel.flatten()[wire_flat > 0.1]
     cluem_flat       = cluem.flatten()[wire_flat > 0.1]
@@ -230,7 +218,6 @@ for filename in os.listdir(args.data):
     b_hit_wirecalib.clear()
     b_hit_energy.clear()
     b_hit_energycalib.clear()
-    b_hit_pred.clear()
     b_hit_cnnem.clear()
     b_hit_cnnmichel.clear()
     b_hit_cluem.clear()
@@ -250,7 +237,6 @@ for filename in os.listdir(args.data):
       b_hit_wirecalib.push_back(wirecalib_flat[i])
       b_hit_energy.push_back(energy_flat[i])
       b_hit_energycalib.push_back(energycalib_flat[i])
-      b_hit_pred.push_back(cnnpred_flat[i])
       b_hit_cnnem.push_back(cnnem_flat[i])
       b_hit_cnnmichel.push_back(cnnmichel_flat[i])
       b_hit_cluem.push_back(cluem_flat[i])
@@ -264,7 +250,6 @@ for filename in os.listdir(args.data):
         b_hit_truthcalib.push_back(truthcalib_flat[i])
         b_hit_trueenergy.push_back(trueenergy_flat[i])
       
-      # b_hit_cnn.push_back(pred_flat[i])
       # b_hit_int.push_back(wire_flat[i])
       # b_hit_energy.push_back(energy_flat[i])
       # if args.datatype == 'MC': b_hit_truth.push_back(float(truth_flat[i]))
@@ -300,7 +285,6 @@ for filename in os.listdir(args.data):
     
     # Close dirs to free up memory
     data_dir.Close()
-    pred_dir.Close()
       
 # Save output
 output_file.Write()

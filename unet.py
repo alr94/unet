@@ -54,64 +54,89 @@ def InceptionGroup(n_filt, input_layer, kernel_initializer):
   
   return out
 
-def inception_unet(inputshape = (160, 160, 1), ki = 'he_uniform', conv_depth = 3, number_base_nodes = 16):
+def inception_unet(inputshape = (160, 160, 1), ki = 'he_uniform', conv_depth = 3, number_base_nodes = 16, number_layers = 4):
   
   main_input = Input(shape = inputshape, name = 'main_input')
+  x = main_input 
   
-  conv1 = InceptionGroup(number_base_nodes, main_input, ki)
-  for i in range(conv_depth - 1): conv1 = InceptionGroup(number_base_nodes, conv1, ki) 
-  pool1 = MaxPooling2D(pool_size = (2, 2))(conv1)
-  
-  conv2 = Dropout(0.5)(pool1)
-  conv2 = InceptionGroup(2 * number_base_nodes, conv2, ki)
-  for i in range(conv_depth - 1): conv2 = InceptionGroup(2 * number_base_nodes, conv2, ki)
-  pool2 = MaxPooling2D(pool_size = ( 2, 2))(conv2)
-  
-  conv3 = Dropout(0.5)(pool2)
-  conv3 = InceptionGroup(4 * number_base_nodes, conv3, ki)
-  for i in range(conv_depth - 1): conv3 = InceptionGroup(4 * number_base_nodes, conv3, ki)
-  pool3 = MaxPooling2D(pool_size = ( 2, 2))(conv3)
-  
-  conv4 = Dropout(0.5)(pool3)
-  conv4 = InceptionGroup(8 * number_base_nodes, conv4, ki)
-  for i in range(conv_depth - 1): conv4 = InceptionGroup(8 * number_base_nodes, conv4, ki)
-  pool4 = MaxPooling2D(pool_size = ( 2, 2))(conv4)
-  
-  conv5 = Dropout(0.5)(pool4)
-  conv5 = InceptionGroup(16 * number_base_nodes, conv5, ki)
-  for i in range(conv_depth - 1): conv5 = InceptionGroup(16 * number_base_nodes,  conv5, ki)
-  up6   = UpSampling2D(size = (2, 2))(conv5)
-  up6 = InceptionGroup(8 * number_base_nodes, up6, ki)
-  merge6 = concatenate([conv4, up6], axis = 3)
+  filters = number_base_nodes
     
-  conv6 = Dropout(0.5)(merge6)
-  conv6 = InceptionGroup(8 * number_base_nodes, conv6, ki)
-  for i in range(conv_depth - 1): conv6 = InceptionGroup(8 * number_base_nodes,  conv6, ki)
-  up7 = UpSampling2D(size = (2, 2))(conv6)
-  up7 = InceptionGroup(4 * number_base_nodes, up7, ki)
-  merge7 = concatenate([conv3, up7], axis = 3)
+  layers = []
+  for layer in range(number_layers):
   
-  conv7 = Dropout(0.5)(merge7)
-  conv7 = InceptionGroup(4 * number_base_nodes, conv7, ki)
-  for i in range(conv_depth - 1): conv7 = InceptionGroup(4 * number_base_nodes,  conv7, ki)
-  up8 = UpSampling2D(size = (2, 2))(conv7)
-  up8 = InceptionGroup(2 * number_base_nodes, up8, ki)
-  merge8 = concatenate([conv2, up8], axis = 3)
+    x = InceptionGroup(filters, x, ki)
+    for i in range(conv_depth - 1): 
+      x = InceptionGroup(filters, x, ki) 
+    x = Dropout(0.5)(x)
+    
+    layers.append(x)
+    
+    x = MaxPooling2D(pool_size = (2, 2))(x)
+    
+    filters = filters * 2
+    
+  x = InceptionGroup(filters, x, ki)
+  x = Dropout(0.5)(x)
   
-  conv8 = Dropout(0.5)(merge8)
-  conv8 = InceptionGroup(2 * number_base_nodes, conv8, ki)
-  for i in range(conv_depth - 1): conv8 = InceptionGroup(2 * number_base_nodes,  conv8, ki)
-  up9 = UpSampling2D(size = (2, 2))(conv8)
-  up9 = InceptionGroup(number_base_nodes, up9, ki)
-  merge9 = concatenate([conv1, up9], axis = 3)
+  for conv in reversed(layers):
+    
+    filters = filters / 2
+    
+    x = UpSampling2D(size = (2, 2))(x)
+    x = concatenate([x,conv], axis = 3)
+    x = InceptionGroup(filters, x, ki)
+    for i in range(conv_depth - 1): 
+      x = InceptionGroup(filters, x, ki) 
+    x = Dropout(0.5)(x)
   
-  conv9 = Dropout(0.5)(merge9)
-  conv9 = InceptionGroup(number_base_nodes, conv9, ki)
-  for i in range(conv_depth - 1): conv9 = InceptionGroup(number_base_nodes,  conv9, ki)
+  # conv2 = InceptionGroup(2 * number_base_nodes, conv2, ki)
+  # for i in range(conv_depth - 1): conv2 = InceptionGroup(2 * number_base_nodes, conv2, ki)
+  # pool2 = MaxPooling2D(pool_size = ( 2, 2))(conv2)
+  # 
+  # conv3 = Dropout(0.5)(pool2)
+  # conv3 = InceptionGroup(4 * number_base_nodes, conv3, ki)
+  # for i in range(conv_depth - 1): conv3 = InceptionGroup(4 * number_base_nodes, conv3, ki)
+  # pool3 = MaxPooling2D(pool_size = ( 2, 2))(conv3)
+  # 
+  # conv4 = Dropout(0.5)(pool3)
+  # conv4 = InceptionGroup(8 * number_base_nodes, conv4, ki)
+  # for i in range(conv_depth - 1): conv4 = InceptionGroup(8 * number_base_nodes, conv4, ki)
+  # pool4 = MaxPooling2D(pool_size = ( 2, 2))(conv4)
   
-  conv10 = Conv2D(1, 1, activation = 'sigmoid')(conv9)
+  # conv5 = InceptionGroup(16 * number_base_nodes, conv5, ki)
+  # for i in range(conv_depth - 1): conv5 = InceptionGroup(16 * number_base_nodes,  conv5, ki)
+  # up6   = UpSampling2D(size = (2, 2))(conv5)
+  # up6 = InceptionGroup(8 * number_base_nodes, up6, ki)
+  # merge6 = concatenate([conv4, up6], axis = 3)
+  #   
+  # conv6 = Dropout(0.5)(merge6)
+  # conv6 = InceptionGroup(8 * number_base_nodes, conv6, ki)
+  # for i in range(conv_depth - 1): conv6 = InceptionGroup(8 * number_base_nodes,  conv6, ki)
+  # up7 = UpSampling2D(size = (2, 2))(conv6)
+  # up7 = InceptionGroup(4 * number_base_nodes, up7, ki)
+  # merge7 = concatenate([conv3, up7], axis = 3)
+  # 
+  # conv7 = Dropout(0.5)(merge7)
+  # conv7 = InceptionGroup(4 * number_base_nodes, conv7, ki)
+  # for i in range(conv_depth - 1): conv7 = InceptionGroup(4 * number_base_nodes,  conv7, ki)
+  # up8 = UpSampling2D(size = (2, 2))(conv7)
+  # up8 = InceptionGroup(2 * number_base_nodes, up8, ki)
+  # merge8 = concatenate([conv2, up8], axis = 3)
+  # 
+  # conv8 = Dropout(0.5)(merge8)
+  # conv8 = InceptionGroup(2 * number_base_nodes, conv8, ki)
+  # for i in range(conv_depth - 1): conv8 = InceptionGroup(2 * number_base_nodes,  conv8, ki)
+  # up9 = UpSampling2D(size = (2, 2))(conv8)
+  # up9 = InceptionGroup(number_base_nodes, up9, ki)
+  # merge9 = concatenate([conv1, up9], axis = 3)
+  # 
+  # conv9 = Dropout(0.5)(merge9)
+  # conv9 = InceptionGroup(number_base_nodes, conv9, ki)
+  # for i in range(conv_depth - 1): conv9 = InceptionGroup(number_base_nodes,  conv9, ki)
   
-  model = Model(inputs = main_input, outputs = conv10)
+  x = Conv2D(1, 1, activation = 'sigmoid')(x)
+  
+  model = Model(inputs = main_input, outputs = x)
   return model
 
 # Previous main model architecture
